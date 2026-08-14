@@ -23,6 +23,28 @@ def gem_fakta(fakta):
         json.dump(fakta, fil, ensure_ascii=False, indent=2)
 
 
+def foreslaa_hukommelse(besked):
+    response = client.responses.create(
+        model="gpt-5.4-mini",
+        instructions=(
+            "Vurder om brugerens besked indeholder en stabil oplysning, "
+            "som kan være nyttig at huske i fremtidige samtaler. "
+            "Eksempler er præferencer, mål, projekter eller arbejdsmetoder. "
+            "Gem ikke passwords, API-nøgler eller andre hemmeligheder. "
+            "Hvis intet bør huskes, svar præcis: INGEN. "
+            "Ellers svar kun med én kort sætning, der beskriver faktummet."
+        ),
+        input=besked,
+    )
+
+    forslag = response.output_text.strip()
+
+    if forslag.upper() == "INGEN":
+        return None
+
+    return forslag
+
+
 st.set_page_config(
     page_title="AK-AI-Partner",
     page_icon="🤖",
@@ -37,6 +59,10 @@ if "messages" not in st.session_state:
 if "facts" not in st.session_state:
     st.session_state.facts = hent_fakta()
 
+if "memory_suggestion" not in st.session_state:
+    st.session_state.memory_suggestion = None
+
+
 with st.sidebar:
     st.header("Hukommelse")
 
@@ -46,26 +72,71 @@ with st.sidebar:
         if ny_fakta.strip():
             st.session_state.facts.append(ny_fakta.strip())
             gem_fakta(st.session_state.facts)
-            st.success("Gemt")
+            st.rerun()
 
     if st.session_state.facts:
         st.write("Partneren husker:")
-        for faktum in st.session_state.facts:
-            st.write(f"- {faktum}")
+
+        for i, faktum in enumerate(st.session_state.facts):
+            col1, col2 = st.columns([4, 1])
+
+            with col1:
+                st.write(faktum)
+
+            with col2:
+                if st.button("Slet", key=f"slet_{i}"):
+                    st.session_state.facts.pop(i)
+                    gem_fakta(st.session_state.facts)
+                    st.rerun()
+
     else:
         st.write("Ingen gemte fakta endnu.")
+
+    if st.button("Ryd chat"):
+        st.session_state.messages = []
+        st.session_state.memory_suggestion = None
+        st.rerun()
+
+
+if st.session_state.memory_suggestion:
+    st.info(
+        "AK-AI-Partner foreslår at huske:\n\n"
+        + st.session_state.memory_suggestion
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Ja, husk det"):
+            forslag = st.session_state.memory_suggestion
+
+            if forslag not in st.session_state.facts:
+                st.session_state.facts.append(forslag)
+                gem_fakta(st.session_state.facts)
+
+            st.session_state.memory_suggestion = None
+            st.rerun()
+
+    with col2:
+        if st.button("Nej tak"):
+            st.session_state.memory_suggestion = None
+            st.rerun()
+
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
+
 besked = st.chat_input("Skriv til AK-AI-Partner...")
 
 if besked:
-    st.session_state.messages.append({
-        "role": "user",
-        "content": besked,
-    })
+    st.session_state.messages.append(
+        {
+            "role": "user",
+            "content": besked,
+        }
+    )
 
     with st.chat_message("user"):
         st.write(besked)
@@ -87,10 +158,16 @@ if besked:
 
     svar = response.output_text
 
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": svar,
-    })
+    st.session_state.messages.append(
+        {
+            "role": "assistant",
+            "content": svar,
+        }
+    )
 
-    with st.chat_message("assistant"):
-        st.write(svar)
+    forslag = foreslaa_hukommelse(besked)
+
+    if forslag and forslag not in st.session_state.facts:
+        st.session_state.memory_suggestion = forslag
+
+    st.rerun()

@@ -9,18 +9,19 @@ load_dotenv()
 client = OpenAI()
 
 FAKTAFIL = "facts.json"
+CHATFIL = "chat_history.json"
 
 
-def hent_fakta():
-    if os.path.exists(FAKTAFIL):
-        with open(FAKTAFIL, "r", encoding="utf-8") as fil:
+def hent_json(filnavn, standard):
+    if os.path.exists(filnavn):
+        with open(filnavn, "r", encoding="utf-8") as fil:
             return json.load(fil)
-    return []
+    return standard
 
 
-def gem_fakta(fakta):
-    with open(FAKTAFIL, "w", encoding="utf-8") as fil:
-        json.dump(fakta, fil, ensure_ascii=False, indent=2)
+def gem_json(filnavn, data):
+    with open(filnavn, "w", encoding="utf-8") as fil:
+        json.dump(data, fil, ensure_ascii=False, indent=2)
 
 
 def foreslaa_hukommelse(besked):
@@ -53,11 +54,11 @@ st.set_page_config(
 st.title("AK-AI-Partner")
 st.caption("Din personlige AI-partner")
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
 if "facts" not in st.session_state:
-    st.session_state.facts = hent_fakta()
+    st.session_state.facts = hent_json(FAKTAFIL, [])
+
+if "messages" not in st.session_state:
+    st.session_state.messages = hent_json(CHATFIL, [])
 
 if "memory_suggestion" not in st.session_state:
     st.session_state.memory_suggestion = None
@@ -71,7 +72,7 @@ with st.sidebar:
     if st.button("Gem i hukommelsen"):
         if ny_fakta.strip():
             st.session_state.facts.append(ny_fakta.strip())
-            gem_fakta(st.session_state.facts)
+            gem_json(FAKTAFIL, st.session_state.facts)
             st.rerun()
 
     if st.session_state.facts:
@@ -86,7 +87,7 @@ with st.sidebar:
             with col2:
                 if st.button("Slet", key=f"slet_{i}"):
                     st.session_state.facts.pop(i)
-                    gem_fakta(st.session_state.facts)
+                    gem_json(FAKTAFIL, st.session_state.facts)
                     st.rerun()
 
     else:
@@ -94,6 +95,7 @@ with st.sidebar:
 
     if st.button("Ryd chat"):
         st.session_state.messages = []
+        gem_json(CHATFIL, [])
         st.session_state.memory_suggestion = None
         st.rerun()
 
@@ -112,7 +114,7 @@ if st.session_state.memory_suggestion:
 
             if forslag not in st.session_state.facts:
                 st.session_state.facts.append(forslag)
-                gem_fakta(st.session_state.facts)
+                gem_json(FAKTAFIL, st.session_state.facts)
 
             st.session_state.memory_suggestion = None
             st.rerun()
@@ -137,6 +139,8 @@ if besked:
             "content": besked,
         }
     )
+
+    gem_json(CHATFIL, st.session_state.messages)
 
     with st.chat_message("user"):
         st.write(besked)
@@ -164,6 +168,8 @@ if besked:
             "content": svar,
         }
     )
+
+    gem_json(CHATFIL, st.session_state.messages)
 
     forslag = foreslaa_hukommelse(besked)
 
